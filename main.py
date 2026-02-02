@@ -7,7 +7,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 # الاتصال بـ Groq
-# تأكد إن السر في جيت هب اسمه: GROQ_API_KEY
 client = Groq(
     api_key=os.environ.get("GROQ_API_KEY"),
 )
@@ -25,7 +24,8 @@ def generate_text(prompt):
                     "content": prompt,
                 }
             ],
-            model="llama3-70b-8192", # موديل فيسبوك القوي جداً
+            # التحديث هنا: استخدمنا الموديل الجديد بدلاً من القديم
+            model="llama-3.3-70b-versatile", 
             temperature=0.7,
         )
         return chat_completion.choices[0].message.content
@@ -38,7 +38,8 @@ def get_topic():
         "أسرار الذكاء الاصطناعي 2026",
         "طرق الربح من الانترنت للمبتدئين",
         "مقارنة هواتف الفئة المتوسطة",
-        "نصائح لتعلم اللغات بسرعة"
+        "نصائح لتعلم اللغات بسرعة",
+        "كيفية البدء في التجارة الإلكترونية"
     ]
     t = random.choice(prompts)
     return generate_text(f"اقترح عنوان مقال جذاب جداً عن: {t}. (اكتب العنوان فقط بدون أي مقدمات)").strip().replace('"','')
@@ -75,7 +76,7 @@ def send_email(subject, body):
         <img src="{img_url}" style="width:100%; border-radius:10px; margin-bottom:20px;">
         {body}
         <hr>
-        <p style="text-align:center; color:gray; font-size: small;">تم النشر بواسطة: Llama 3 (Groq AI)</p>
+        <p style="text-align:center; color:gray; font-size: small;">تم النشر بواسطة: Llama 3.3 (Groq AI)</p>
     </div>
     """
     
@@ -90,20 +91,26 @@ def send_email(subject, body):
         server.send_message(msg)
 
 if __name__ == "__main__":
-    print("🚀 بدء تشغيل Groq Bot (المجاني والسريع)...")
+    print("🚀 بدء تشغيل Groq Bot (Llama 3.3 الجديد)...")
     
     for i in range(5):
         print(f"\n--- ⚡ جاري كتابة المقال {i+1} ---")
         try:
             topic = get_topic()
+            if not topic: 
+                print("⚠️ لم يتم توليد عنوان، تخطي...")
+                continue
+                
             print(f"العنوان: {topic}")
             
             content = write_article(topic)
             if len(content) > 500:
                 send_email(topic, content)
                 print("✅ تم الإرسال!")
+            else:
+                print("⚠️ المحتوى فارغ!")
             
-            time.sleep(10) # Groq سريع جداً مش محتاج راحة طويلة
+            time.sleep(10) 
             
         except Exception as e:
             print(f"❌ خطأ: {e}")
