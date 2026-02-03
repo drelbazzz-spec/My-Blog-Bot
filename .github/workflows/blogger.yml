@@ -1,9 +1,9 @@
 name: Tech Bot
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 9,15,20 * * *' # تشغيل تلقائي 3 مرات يومياً
+#    on:
+ #    workflow_dispatch:
+#      schedule:
+#       - cron: '0 9,15,20 * * *' # تشغيل تلقائي 3 مرات يومياً
 
 jobs:
   build:
