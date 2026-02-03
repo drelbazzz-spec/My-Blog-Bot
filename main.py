@@ -3,81 +3,96 @@ import smtplib
 import time
 import random
 import requests
-import re  # مكتبة معالجة النصوص
+import re
 import urllib.parse
 from groq import Groq
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 
-# الاتصال بـ Groq
-client = Groq(
-    api_key=os.environ.get("GROQ_API_KEY"),
-)
+# إعداد العميل
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
-def generate_text(prompt):
-    try:
-        chat_completion = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": "أنت كاتب محتوى محترف وتكتب بالعربية بطلاقة."
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            model="llama-3.3-70b-versatile", 
-            temperature=0.7,
-        )
-        return chat_completion.choices[0].message.content
-    except Exception as e:
-        print(f"⚠️ خطأ في Groq: {e}")
-        return ""
-
+# --- دوال المساعدة ---
 def clean_format(text):
-    """دالة لتنظيف النص وتحويل الرموز إلى HTML صحيح لبلوجر"""
-    # تحويل **نص** إلى <b>نص</b>
     text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-    # تحويل ## عنوان إلى <h2>عنوان</h2>
     text = re.sub(r'##\s*(.*?)\n', r'<h2>\1</h2>\n', text)
-    # تنظيف كود الـ Markdown
-    text = text.replace("```html", "").replace("```", "").replace("* ", "• ")
+    text = re.sub(r'###\s*(.*?)\n', r'<h3>\1</h3>\n', text)
+    text = text.replace("```html", "").replace("```", "")
     return text
 
-def get_topic():
-    prompts = [
-        "أسرار الذكاء الاصطناعي 2026",
-        "طرق الربح من الانترنت للمبتدئين",
-        "مقارنة هواتف الفئة المتوسطة",
-        "نصائح لتعلم اللغات بسرعة",
-        "كيفية البدء في التجارة الإلكترونية"
-    ]
-    t = random.choice(prompts)
-    return generate_text(f"اقترح عنوان مقال جذاب جداً عن: {t}. (اكتب العنوان فقط بدون أي مقدمات)").strip().replace('"','')
+def llm_call(prompt, system_role="Assistant", temp=0.7):
+    try:
+        completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_role},
+                {"role": "user", "content": prompt}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=temp,
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        print(f"⚠️ خطأ في الاتصال: {e}")
+        return ""
 
-def write_article(topic):
+# --- الخوارزمية الذكية (The Agents) ---
+
+def step1_planner(topic):
+    print("1️⃣ جاري التخطيط للمقال...")
     prompt = f"""
-    اكتب مقالاً طويلاً وتفصيلياً (لا يقل عن 1200 كلمة) عن: "{topic}".
-    
-    تعليمات صارمة للتنسيق (HTML Only):
-    1. لا تستخدم علامات Markdown أبداً (مثل ** أو ##).
-    2. استخدم <b> للكلمات العريضة والمهمة.
-    3. استخدم <h2> للعناوين الرئيسية والفرعية.
-    4. استخدم <br> للفصل بين الفقرات.
-    5. استخدم <ul> و <li> للقوائم والنقاط.
-    
-    الهيكل:
-    1. مقدمة قوية.
-    2. التفاصيل (استخدم قوائم ونقاط).
-    3. الخاتمة.
-    
-    الأسلوب: عربي فصحى سلس، منسق، وجاهز للنشر فوراً.
+    أنت رئيس تحرير. ضع خطة تفصيلية (Outline) لمقال عن: "{topic}".
+    اريد 4 عناوين رئيسية قوية تغطي الموضوع من زاوية عملية ونادرة.
+    لا تكتب مقدمة ولا خاتمة، فقط العناوين والنقاط تحتها.
     """
-    raw_text = generate_text(prompt)
-    return clean_format(raw_text) # تنظيف النص قبل الإرسال
+    return llm_call(prompt, system_role="Expert Planner")
 
+def step2_writer(topic, outline):
+    print("2️⃣ جاري كتابة المسودة الأولى...")
+    prompt = f"""
+    اكتب مسودة أولية لمقال عن "{topic}" بناءً على هذه الخطة:
+    {outline}
+    
+    اكتب بلهجة مصرية بيضاء (فصحى بسيطة قريبة للعامية الراقية).
+    ركز على المعلومات فقط. لا يهم التنسيق الآن.
+    """
+    return llm_call(prompt, system_role="Writer", temp=0.8)
+
+def step3_critic(draft):
+    print("3️⃣ جاري نقد ومراجعة المحتوى (Feedback Loop)...")
+    prompt = f"""
+    اقرأ هذه المسودة وانقدها بشدة:
+    {draft}
+    
+    حدد 3 مشاكل فيها (مثلاً: حشو، تكرار، كلمات روبوتية مثل "في خضم"، ملل).
+    اكتب ملاحظاتك للمحرر ليقوم بتحسينها.
+    """
+    return llm_call(prompt, system_role="Harsh Critic")
+
+def step4_editor(topic, draft, critique):
+    print("4️⃣ جاري إعادة الصياغة والتحسين النهائي (Final Polish)...")
+    prompt = f"""
+    أنت محرر محترف (Copywriter). 
+    لديك مسودة لمقال عن "{topic}"، وتقرير نقد عليها.
+    
+    النقد: {critique}
+    المسودة: {draft}
+    
+    المطلوب: أعد كتابة المقال بالكامل ليصبح "تحفة فنية".
+    - تخلص من أي كلمات روبوتية.
+    - استخدم تنسيق HTML (h2, b, ul).
+    - اجعل الأسلوب بشرياً 100%، شيقاً، ومفيداً.
+    - لا تضع توقيعاً في النهاية.
+    """
+    final_content = llm_call(prompt, system_role="Senior Editor", temp=0.7)
+    return clean_format(final_content)
+
+def get_topic():
+    seeds = ["الذكاء الاصطناعي", "العمل الحر", "التجارة الالكترونية", "الصحة النفسية", "تطوير الذات"]
+    seed = random.choice(seeds)
+    return llm_call(f"اقترح عنوان مقال فيرال (Viral) وجذاب جداً عن {seed}. العنوان فقط بدون علامات.", temp=0.9).strip().replace('"','')
+
+# --- الإرسال (مع إصلاح الصور) ---
 def send_email(subject, body):
     sender = os.environ["SENDER_EMAIL"]
     password = os.environ["SENDER_PASSWORD"]
@@ -88,58 +103,74 @@ def send_email(subject, body):
     msg['To'] = receiver
     msg['Subject'] = subject
     
-    # تنسيق الرسالة النهائي (CSS لبلوجر)
     html_template = f"""
-    <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 18px; line-height: 1.8; color: #333;">
-        <img src="cid:topimage" style="width:100%; max-width: 800px; height: auto; border-radius:15px; margin-bottom:25px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-        
+    <div dir="rtl" style="font-family: 'Segoe UI', sans-serif; font-size: 18px; line-height: 1.8; color: #333;">
+        <img src="cid:topimage" style="width:100%; border-radius:12px; margin-bottom:20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
         {body}
-        
-        <br><hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
-        <p style="text-align:center; color:#888; font-size: 14px;">
-            تم إعداد هذا المقال بواسطة المساعد الذكي (AI Writer) 🤖
-        </p>
     </div>
     """
-    
     msg.attach(MIMEText(html_template, 'html'))
     
-    # تحميل الصورة
+    # محاولة تحميل الصورة (التعديل الجديد)
+    img_data = None
     try:
-        encoded_query = urllib.parse.quote(subject)
-        img_url = f"https://image.pollinations.ai/prompt/hyper-realistic photo of {encoded_query}?width=1280&height=720&model=flux&seed={random.randint(1,9999)}"
-        print("📸 جاري تحميل الصورة...")
-        img_data = requests.get(img_url).content
-        image = MIMEImage(img_data)
-        image.add_header('Content-ID', '<topimage>')
-        msg.attach(image)
+        # المحاولة الأولى: صور الذكاء الاصطناعي
+        encoded_query = urllib.parse.quote(f"cinematic shot of {subject}, 4k, realistic")
+        img_url = f"https://image.pollinations.ai/prompt/{encoded_query}?width=1280&height=720&model=flux&seed={random.randint(1,999)}"
+        print("📸 جاري تحميل صورة AI...")
+        response = requests.get(img_url, timeout=10)
+        if response.status_code == 200:
+            img_data = response.content
+        else:
+            raise Exception("AI Image failed")
+            
     except Exception as e:
-        print(f"⚠️ فشل تحميل الصورة: {e}")
+        print(f"⚠️ فشل AI، جاري استخدام البديل: {e}")
+        try:
+            # المحاولة الثانية: صور طبيعية عشوائية (Backup)
+            img_url = "https://picsum.photos/800/600"
+            img_data = requests.get(img_url, timeout=10).content
+        except:
+            print("❌ فشل تحميل جميع الصور")
 
-    # الإرسال
+    # إرفاق الصورة (لو نجح التحميل)
+    if img_data:
+        try:
+            # التعديل الهام هنا: _subtype='jpeg'
+            # ده بيجبر البوت يقبل الصورة حتى لو مش عارف نوعها
+            image = MIMEImage(img_data, _subtype='jpeg') 
+            image.add_header('Content-ID', '<topimage>')
+            msg.attach(image)
+            print("✅ تم إرفاق الصورة بنجاح!")
+        except Exception as e:
+            print(f"❌ خطأ تقني في إرفاق الصورة: {e}")
+
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
         server.login(sender, password)
         server.send_message(msg)
 
 if __name__ == "__main__":
-    print("🚀 بدء تشغيل البوت (إصدار بلوجر المحسن)...")
+    print("🚀 بدء نظام الوكلاء الأذكياء (مع إصلاح الصور)...")
     
-    for i in range(5):
-        print(f"\n--- 📝 جاري العمل على المقال {i+1} ---")
+    for i in range(5): 
         try:
             topic = get_topic()
-            if not topic: continue
-                
-            print(f"العنوان: {topic}")
-            content = write_article(topic)
+            print(f"\n🌟 الموضوع: {topic}")
             
-            if len(content) > 500:
-                send_email(topic, content)
-                print("✅ تم النشر بتنسيق HTML سليم!")
-            else:
-                print("⚠️ المحتوى فارغ!")
+            # تشغيل المصنع (Planner -> Writer -> Critic -> Editor)
+            outline = step1_planner(topic)
+            draft = step2_writer(topic, outline)
+            critique = step3_critic(draft)
+            final_article = step4_editor(topic, draft, critique)
             
-            time.sleep(10) 
+            if len(final_article) > 500:
+                send_email(topic, final_article)
+                print("✅ تم النشر!")
+            
+            time.sleep(10)
+            
+        except Exception as e:
+            print(f"❌ خطأ: {e}")
             
         except Exception as e:
             print(f"❌ خطأ: {e}")
